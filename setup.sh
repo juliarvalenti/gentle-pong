@@ -66,7 +66,40 @@ cat > "$CONFIG" << 'JSON'
 JSON
 green "Config written: $CONFIG"
 
-# ── 4. Patch Homebrew cellar ─────────────────────────────────────
+# ── 4. Register Claude Code hooks ───────────────────────────────
+SETTINGS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+
+yellow "Registering hooks in settings.json..."
+python3 -c "
+import json, os
+
+path = '$SETTINGS'
+hook_cmd = '$PEON_DIR/peon.sh'
+
+settings = {}
+if os.path.exists(path):
+    with open(path) as f:
+        settings = json.load(f)
+
+hooks = settings.setdefault('hooks', {})
+peon_entry = {'matcher': '', 'hooks': [{'type': 'command', 'command': hook_cmd, 'timeout': 10}]}
+
+for event in ['SessionStart', 'UserPromptSubmit', 'Stop', 'Notification', 'PermissionRequest']:
+    entries = [e for e in hooks.get(event, [])
+               if not any('peon' in h.get('command', '') for h in e.get('hooks', []))]
+    entries.append(peon_entry)
+    hooks[event] = entries
+
+settings['hooks'] = hooks
+with open(path, 'w') as f:
+    json.dump(settings, f, indent=2)
+    f.write('\n')
+
+print('  Hooks registered for: ' + ', '.join(['SessionStart', 'UserPromptSubmit', 'Stop', 'Notification', 'PermissionRequest']))
+"
+green "Hooks registered"
+
+# ── 5. Patch Homebrew cellar ─────────────────────────────────────
 PEON_SH="$(brew --prefix peon-ping)/libexec/peon.sh"
 
 if [ ! -f "$PEON_SH" ]; then
